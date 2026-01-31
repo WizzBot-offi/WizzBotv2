@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WizzBot v2.0 | OLED Mirror</title>
+
+<style>
+:root { --oled-white:#ffffff; --bg:#000000; --neon:#00ffcc; }
+body {
+  background:#0b0b0e; color:var(--neon); font-family:'Courier New', monospace;
+  display:flex; flex-direction:column; align-items:center;
+  padding:20px; margin:0;
+}
+#oled-display {
+  width:256px; height:128px; background:var(--bg);
+  border:3px solid var(--oled-white); border-radius:12px;
+  position:relative; overflow:hidden; margin-top:10px;
+  box-shadow:0 0 20px rgba(255,255,255,0.1);
+}
+.eye { position:absolute; background:var(--oled-white); transition:all 0.1s ease; }
+.extra-ui { position:absolute; color:var(--oled-white); font-weight:bold; font-size:14px; width:100%; text-align:center; }
+
+/* EXPRESSION CSS (MATCHING YOUR MCU LOGIC) */
+.face-idle .eye { width:48px; height:48px; border-radius:8px; top:40px; }
+.face-idle .eye.left { left:48px; } .face-idle .eye.right { right:48px; }
+
+.face-happy .eye { width:48px; height:48px; border-radius:12px; top:36px; }
+.face-happy .eye.left { left:48px; } .face-happy .eye.right { right:48px; }
+.face-happy .mouth { position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+  width:20px; height:2px; background:var(--oled-white); display:block; }
+
+.face-annoyed .eye { width:48px; height:16px; top:44px; }
+.face-annoyed .eye.left { left:48px; } .face-annoyed .eye.right { right:48px; }
+.face-annoyed .extra-ui { top:10px; display:block; }
+.face-annoyed .extra-ui::after { content:'stahp..'; }
+
+.face-angry .eye { width:48px; height:40px; border-radius:8px; top:44px; }
+.face-angry .eye.left { left:48px; } .face-angry .eye.right { right:48px; }
+.face-angry .brow { position:absolute; width:56px; height:4px; background:var(--oled-white);
+  top:30px; display:block; }
+.face-angry .brow.left { left:40px; transform:rotate(20deg); }
+.face-angry .brow.right { right:40px; transform:rotate(-20deg); }
+.face-angry .extra-ui { bottom:10px; display:block; }
+.face-angry .extra-ui::after { content:'SO MAD!'; }
+
+.face-confused .eye.left { width:40px; height:40px; border-radius:50%; top:40px; left:48px; }
+.face-confused .eye.right { width:40px; height:40px; border-radius:8px; top:40px; right:48px; }
+.face-confused .extra-ui { top:10px; display:block; }
+.face-confused .extra-ui::after { content:'??'; }
+
+.face-surprised .eye {
+  width:50px; height:50px; border-radius:50%;
+  background:transparent; border:4px solid var(--oled-white);
+  top:35px; box-sizing:border-box;
+}
+.face-surprised .eye.left { left:48px; }
+.face-surprised .eye.right { right:48px; }
+.face-surprised .eye::after {
+  content:''; position:absolute; width:14px; height:14px;
+  background:var(--oled-white); border-radius:50%;
+  top:50%; left:50%; transform:translate(-50%,-50%);
+}
+
+.face-awe .eye { background:transparent; width:50px; height:50px; top:30px; }
+.face-awe .eye::before {
+  content:'❤'; font-size:50px; color:white; position:absolute; top:-10px;
+}
+.face-awe .eye.left { left:45px; } .face-awe .eye.right { right:45px; }
+.face-awe .extra-ui { bottom:8px; display:block; }
+.face-awe .extra-ui::after { content:'awee'; }
+
+.face-sleepy .eye { width:48px; height:4px; top:70px; }
+.face-sleepy .eye.left { left:48px; } .face-sleepy .eye.right { right:48px; }
+.face-sleepy .extra-ui { top:15px; right:20px; text-align:right; display:block; }
+.face-sleepy .extra-ui::after { content:'Zz'; }
+
+.face-scared .eye { width:12px; height:12px; border-radius:50%; top:64px; }
+.face-scared .eye.left { left:72px; } .face-scared .eye.right { right:72px; }
+
+/* DASHBOARD */
+.brow, .mouth, .extra-ui { display:none; }
+.panel {
+  border:1px solid #333; background:#111; border-radius:15px;
+  padding:20px; max-width:450px; width:95%; text-align:center; margin-top:10px;
+}
+.status-container { margin-bottom:15px; font-size:12px; letter-spacing:2px; }
+.online { color:var(--neon); } .offline { color:#ff4444; }
+.reset-btn {
+  width:100%; background:#333; color:#fff; padding:12px;
+  border:1px solid #444; border-radius:8px; cursor:pointer;
+  margin-bottom:10px; font-weight:bold;
+}
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+button {
+  background:#222; border:1px solid #444; color:#fff;
+  padding:12px; border-radius:8px; cursor:pointer;
+  font-weight:bold; transition:0.2s;
+}
+button:active { background:var(--neon); color:#000; }
+input {
+  background:#000; border:1px solid var(--neon); color:#fff;
+  padding:15px; width:88%; border-radius:8px;
+  margin-top:15px; text-align:center; font-size:16px;
+}
+.hint { font-size:11px; color:#666; margin-top:10px; font-style:italic; }
+</style>
+</head>
+
+<body>
+
+<div class="status-container offline" id="status-box">
+  [ <span id="status-text">SYSTEM OFFLINE</span> ]
+</div>
+
+<div id="oled-display" class="face-idle">
+  <div class="extra-ui"></div>
+  <div class="brow left"></div>
+  <div class="brow right"></div>
+  <div class="eye left"></div>
+  <div class="eye right"></div>
+  <div class="mouth"></div>
+</div>
+
+<div class="panel">
+  <button class="reset-btn" onclick="updateBot('IDLE')">RESET TO IDLE</button>
+  <div class="grid">
+    <button onclick="updateBot('HAPPY')">HAPPY</button>
+    <button onclick="updateBot('AWE')">AWE</button>
+    <button onclick="updateBot('ANNOYED')">ANNOYED</button>
+    <button onclick="updateBot('ANGRY')">ANGRY</button>
+    <button onclick="updateBot('SURPRISED')">SURPRISED</button>
+    <button onclick="updateBot('CONFUSED')">CONFUSED</button>
+    <button onclick="updateBot('SLEEPY')">SLEEPY</button>
+    <button onclick="updateBot('SCARED')">SCARED</button>
+  </div>
+  <input type="text" id="msgInput" placeholder="Send data...">
+  <button onclick="sendMsg()" style="width:95%; margin-top:10px; background:var(--neon); color:#000; font-weight:bold;">TRANSMIT</button>
+  <div class="hint">Keywords: "cute", "love", "hate", "bad", "stupid"</div>
+</div>
+
+<script>
+const EYES_WEBHOOK="https://io.adafruit.com/api/v2/webhooks/feed/AxnZRPsmcxN8BccGzCnaHTV7oKBs";
+const MESSAGE_WEBHOOK="https://io.adafruit.com/api/v2/webhooks/feed/2kcdxyqq9YouH4yBLuWDJgWpFXP8";
+const STATUS_FEED_URL="https://io.adafruit.com/api/v2/WizzBot/feeds/status";
+
+const oled=document.getElementById("oled-display");
+const msgInput=document.getElementById("msgInput");
+
+function post(url,value){
+  fetch(url,{
+    method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:"value="+encodeURIComponent(value)
+  }).catch(()=>{});
+}
+
+function updateBot(val){
+  oled.className="face-"+val.toLowerCase();
+  post(EYES_WEBHOOK,val);
+}
+
+function sendMsg(){
+  const raw=msgInput.value.trim(); if(!raw)return;
+  const msg=raw.toLowerCase();
+
+  const happy=["haha","hehe","lol","lmao","xd"];
+  const compliments=["cute","nice","love","awesome","cool","pretty","sweet"];
+  const swears=["hate","stupid","idiot","dumb","shit","fuck","bad"];
+
+  let mood=null;
+
+  if(happy.some(w=>msg.includes(w))) mood="HAPPY";
+  else if(compliments.some(w=>msg.includes(w))) mood="AWE";
+  else if(swears.some(w=>msg.includes(w))) mood="ANGRY";
+  else if(raw===raw.toUpperCase()||raw.includes("!!!")) mood="SURPRISED";
+  else if(raw.length<4||!/[aeiou]/i.test(raw)) mood="CONFUSED";
+
+  if(mood) updateBot(mood);
+  else post(MESSAGE_WEBHOOK,raw);
+
+  msgInput.value="";
+}
+
+async function checkStatus(){
+  try{
+    const r=await fetch(STATUS_FEED_URL);
+    const d=await r.json();
+    const diff=(Date.now()-new Date(d.updated_at).getTime())/1000;
+    const box=document.getElementById("status-box");
+    const text=document.getElementById("status-text");
+
+    if(diff<20){ box.className="status-container online"; text.innerText="SYSTEM ONLINE"; }
+    else{ box.className="status-container offline"; text.innerText="SYSTEM OFFLINE"; }
+  }catch{
+    document.getElementById("status-box").className="status-container offline";
+    document.getElementById("status-text").innerText="SYSTEM OFFLINE";
+  }
+}
+setInterval(checkStatus,10000);
+checkStatus();
+</script>
+
+</body>
+</html>
